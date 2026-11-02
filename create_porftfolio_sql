@@ -1,0 +1,68 @@
+CREATE TABLE Portfolio (
+    ID         INT IDENTITY(1,1) NOT NULL,
+    StudentID  INT NOT NULL,
+    CreatedAt  DATETIME2 NOT NULL CONSTRAINT DF_Portfolio_CreatedAt DEFAULT (SYSDATETIME()),
+    CONSTRAINT PK_Portfolio PRIMARY KEY (ID),
+    CONSTRAINT FK_Portfolio_Student FOREIGN KEY (StudentID) REFERENCES Student(ID),
+    CONSTRAINT UQ_Portfolio_Student UNIQUE (StudentID)   
+);
+GO
+
+CREATE TABLE AchievementType (
+    ID    INT IDENTITY(1,1) NOT NULL,
+    Code  NVARCHAR(30) NOT NULL,    
+    Name  NVARCHAR(50) NOT NULL,
+    CONSTRAINT PK_AchievementType PRIMARY KEY (ID),
+    CONSTRAINT UQ_AchievementType_Code UNIQUE (Code)
+);
+GO
+ 
+CREATE TABLE Achievement (
+    ID           INT IDENTITY(1,1) NOT NULL,
+    PortfolioID  INT NOT NULL,
+    TypeID       INT NOT NULL,
+    Title        NVARCHAR(200) NOT NULL,
+    [Year]       SMALLINT NOT NULL,
+    -- Поля, які є лише в деяких типів досягнень (в інших вони NULL)
+    Place        TINYINT       NULL,   
+    Issuer       NVARCHAR(50)  NULL,  
+    Hours        SMALLINT      NULL,   
+    Position     NVARCHAR(50)  NULL,  
+    Months       TINYINT       NULL,   
+    Journal      NVARCHAR(100) NULL,   
+    CONSTRAINT PK_Achievement PRIMARY KEY (ID),
+    CONSTRAINT FK_Achievement_Portfolio FOREIGN KEY (PortfolioID) REFERENCES Portfolio(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_Achievement_Type      FOREIGN KEY (TypeID)      REFERENCES AchievementType(ID)
+);
+GO
+ 
+
+CREATE TABLE PortfolioSkill (
+    ID           INT IDENTITY(1,1) NOT NULL,
+    PortfolioID  INT NOT NULL,
+    SkillName    NVARCHAR(50) NOT NULL,
+    CONSTRAINT PK_PortfolioSkill PRIMARY KEY (ID),
+    CONSTRAINT FK_PortfolioSkill_Portfolio FOREIGN KEY (PortfolioID) REFERENCES Portfolio(ID) ON DELETE CASCADE,
+    CONSTRAINT UQ_PortfolioSkill UNIQUE (PortfolioID, SkillName)
+);
+GO
+
+CREATE NONCLUSTERED INDEX IX_Achievement_PortfolioID
+    ON Achievement (PortfolioID);
+CREATE NONCLUSTERED INDEX IX_PortfolioSkill_PortfolioID
+    ON PortfolioSkill (PortfolioID);
+GO
+ 
+INSERT INTO AchievementType (Code, Name) VALUES
+    (N'olympiad',    N'Олімпіада'),
+    (N'certificate', N'Сертифікат'),
+    (N'internship',  N'Стажування'),
+    (N'publication', N'Публікація');
+GO
+        
+-- перевірка створення 
+SELECT * FROM AchievementType;
+GO
+SELECT COUNT(*) AS Portfolios FROM Portfolio;
+SELECT COUNT(*) AS Achievements FROM Achievement;
+SELECT COUNT(*) AS Skills FROM PortfolioSkill;
