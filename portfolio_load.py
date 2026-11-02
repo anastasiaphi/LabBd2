@@ -1,38 +1,25 @@
-"""
-Лаба 2, пункти 3-4: наповнення MongoDB і SQL Server однаковими даними портфоліо.
 
-Що робить скрипт:
-  1. Створює тестову групу і додає в таблицю Student тестових студентів (щоб було багато даних).
-  2. Генерує портфоліо (досягнення і навички) для всіх активних студентів.
-  3. Записує ЦІ САМІ дані в MongoDB (колекція portfolios) і в SQL (4 таблиці з файлу 07).
-  4. Виводить кількість записів і час завантаження.
-
-Запуск:  python portfolio_load.py
-Скрипт можна запускати повторно: старі дані портфоліо спочатку видаляються.
-"""
-
+# наповнення MongoDB і SQL Server однаковими даними портфоліо.
 import random
 import time
 
 import pyodbc
 from pymongo import MongoClient, ASCENDING
 
-# ---------------------------- налаштування ----------------------------
 SQL_SERVER = r"(localdb)\MSSQLLocalDB"
 SQL_DATABASE = "Uni"
-
 MONGO_URI = "mongodb://localhost:27017"
 MONGO_DB = "uni_portfolio"
 MONGO_COLLECTION = "portfolios"
 
-TEST_STUDENTS = 20000            # скільки тестових студентів має бути в тестовій групі
-TEST_GROUP = "ТЕСТ-ПОРТФОЛІО"    # назва тестової групи (її можна потім видалити)
-SPECIALIZATION_ID = 2            # спеціальність з тестових даних
+TEST_STUDENTS = 20000            
+TEST_GROUP = "ТЕСТ-ПОРТФОЛІО"    
+SPECIALIZATION_ID = 2            
 
-BATCH = 5000                     # розмір порції для запису
-random.seed(42)                  # однаковий результат при кожному запуску
+BATCH = 5000                     
+random.seed(42)                 
 
-# ----------------------------- довідники -----------------------------
+
 FIRST_NAMES = ["Олександр", "Андрій", "Максим", "Дмитро", "Іван", "Тарас", "Богдан", "Артем",
                "Олена", "Марія", "Анна", "Софія", "Наталія", "Катерина", "Юлія", "Вікторія"]
 LAST_NAMES = ["Шевченко", "Коваленко", "Бондаренко", "Ткаченко", "Кравченко", "Мельник",
@@ -43,7 +30,6 @@ SKILLS = ["C#", "SQL", "Python", "Java", "JavaScript", "C++", "HTML/CSS", "Git",
           "Linux", "Excel", "Power BI", "англійська B2", "англійська C1", "аналітика даних",
           "тестування ПЗ", "робота в команді", "презентації"]
 
-# Типи досягнень: назви та унікальні поля кожного типу
 TYPES = {
     "olympiad": {
         "titles": ["Олімпіада з інформатики", "Олімпіада з математики", "Хакатон університету",
@@ -72,9 +58,8 @@ TYPES = {
 TYPE_CODES = list(TYPES.keys())
 
 
-# ----------------------------- генерація -----------------------------
-def make_portfolio(student_id):
-    """Один документ портфоліо (у такому вигляді він іде в MongoDB)."""
+#  генерація 
+def make_portfolio(student_id):  
     count = random.choices([0, 1, 2, 3, 4, 5], weights=[10, 20, 25, 20, 15, 10])[0]
     achievements = []
     for _ in range(count):
@@ -87,7 +72,7 @@ def make_portfolio(student_id):
     return {"studentId": student_id, "achievements": achievements, "skills": skills}
 
 
-# ------------------------------- SQL ---------------------------------
+# sql
 def pick_driver():
     drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
     odbc = sorted([d for d in drivers if d.startswith("ODBC Driver")], reverse=True)
@@ -95,7 +80,7 @@ def pick_driver():
         return odbc[0]
     if drivers:
         return drivers[0]
-    raise SystemExit("Не знайдено ODBC-драйвер для SQL Server. Встанови 'ODBC Driver 18 for SQL Server'.")
+    raise SystemExit("Не знайдено ODBC-драйвер для SQL Server")
 
 
 def sql_connect():
@@ -107,7 +92,7 @@ def sql_connect():
 
 
 def ensure_test_students(conn):
-    """Створює тестову групу і догенерує студентів до потрібної кількості."""
+   
     cur = conn.cursor()
     cur.execute("SELECT ID FROM SGroup WHERE Name = ?", TEST_GROUP)
     row = cur.fetchone()
@@ -134,7 +119,6 @@ def load_sql(conn, portfolios):
     cur = conn.cursor()
     cur.fast_executemany = True
 
-    # Видаляємо старі дані (спочатку залежні таблиці)
     cur.execute("DELETE FROM Achievement")
     cur.execute("DELETE FROM PortfolioSkill")
     cur.execute("DELETE FROM Portfolio")
@@ -147,8 +131,7 @@ def load_sql(conn, portfolios):
     for portfolio_id, p in enumerate(portfolios, start=1):
         portfolio_rows.append((portfolio_id, p["studentId"]))
         for a in p["achievements"]:
-            achievement_id += 1
-            # унікальні поля типу: якщо їх немає в документі, у SQL буде NULL
+            achievement_id += 1         
             achievements.append((achievement_id, portfolio_id, type_ids[a["type"]], a["title"], a["year"],
                                  a.get("place"), a.get("issuer"), a.get("hours"),
                                  a.get("position"), a.get("months"), a.get("journal")))
@@ -160,8 +143,6 @@ def load_sql(conn, portfolios):
         cur.executemany("INSERT INTO Portfolio (ID, StudentID) VALUES (?, ?)", portfolio_rows[i:i + BATCH])
     cur.execute("SET IDENTITY_INSERT Portfolio OFF")
 
-    # У Achievement багато необов'язкових полів (NULL). Швидкий режим pyodbc з NULL у першому рядку
-    # інколи плутає типи, тому для цієї таблиці вимикаємо його (трохи повільніше, але надійно).
     cur.fast_executemany = False
     cur.execute("SET IDENTITY_INSERT Achievement ON")
     for i in range(0, len(achievements), BATCH):
@@ -176,14 +157,11 @@ def load_sql(conn, portfolios):
     conn.commit()
     return len(portfolio_rows), len(achievements), len(skills)
 
-
-# ------------------------------ MongoDB ------------------------------
 def load_mongo(portfolios):
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     db = client[MONGO_DB]
     db.drop_collection(MONGO_COLLECTION)
 
-    # Валідація структури документа (як у лекції про гнучку схему)
     validator = {"$jsonSchema": {
         "bsonType": "object",
         "required": ["studentId", "achievements", "skills"],
@@ -214,8 +192,6 @@ def load_mongo(portfolios):
     col.create_index([("achievements.type", ASCENDING)])
     return col.count_documents({})
 
-
-# ------------------------------- main --------------------------------
 def main():
     conn = sql_connect()
     ensure_test_students(conn)
